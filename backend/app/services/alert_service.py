@@ -18,6 +18,13 @@ class AlertService:
     def check_reading(self, device_id: str, values: dict) -> list:
         """values example: {'temperature': 62.0, 'battery': 7, ...}. Returns newly created alerts."""
         created = []
+
+        # Device is sending data, so any DEVICE_OFFLINE alert is no longer true.
+        offline = self.alerts.find_active(device_id, "DEVICE_OFFLINE")
+        if offline is not None:
+            self.alerts.resolve(offline.id)
+            logger.info("Alert DEVICE_OFFLINE on %s auto-resolved (data received)", device_id)
+
         for rule in ALL_RULES:
             threshold = self.thresholds.get_effective(rule.metric, device_id)
             if threshold is None:

@@ -1,5 +1,4 @@
 import json
-import threading
 import time
 
 import paho.mqtt.client as mqtt
@@ -55,10 +54,13 @@ class MqttSubscriber:
 
 if __name__ == "__main__":
     from backend.app.services.ingestion_service import IngestionService
+    from backend.app.services.offline_detector import OfflineDetector
 
     setup_logging()
     ingestion = IngestionService()
     ingestion.start()
+    detector = OfflineDetector()
+    detector.start()
     subscriber = MqttSubscriber(on_message_callback=ingestion.submit)
     subscriber.start()
     logger.info("Subscriber + ingestion running. Press Ctrl+C to stop.")
@@ -67,5 +69,6 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         subscriber.stop()
+        detector.stop()
         ingestion.stop()
         logger.info("Stopped. processed=%s rejected=%s dropped=%s", ingestion.processed, ingestion.rejected, ingestion.dropped)
