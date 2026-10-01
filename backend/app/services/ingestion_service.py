@@ -9,6 +9,7 @@ from backend.app.logging_config import get_logger
 from backend.app.repositories.device_repository import DeviceRepository
 from backend.app.repositories.reading_repository import ReadingRepository
 from backend.app.schemas.telemetry import TelemetryIn
+from backend.app.services.alert_service import AlertService
 
 logger = get_logger("services.ingestion")
 
@@ -57,7 +58,7 @@ class IngestionService:
                 self.queue.task_done()
 
     def process(self, payload: dict) -> bool:
-        """Validate, then save. Returns True if stored."""
+        """Validate, save, then check alert rules. Returns True if stored."""
         try:
             data = TelemetryIn(**payload)
         except ValidationError as exc:
@@ -71,8 +72,8 @@ class IngestionService:
             devices = DeviceRepository(db)
             if devices.get_by_device_id(data.device_id) is None:
                 devices.add(data.device_id, name=data.device_id)
-                logger.info("Auto-registered new device %s", data.device_id)
-
+                
+                
             ReadingRepository(db).add(
                 device_id=data.device_id,
                 timestamp=data.timestamp or now,
@@ -84,6 +85,17 @@ class IngestionService:
                 battery=data.battery,
             )
             devices.update_status(data.device_id, "ONLINE", last_seen=now)
+
+            values = {
+                "temperature": data.temperature,
+                "humidity": data.humidity,
+                "voltage": data.voltage,
+                "current": data.current,
+                "pressure": data.pressure,
+                "battery": data.battery,
+            }
+            AlertService(db).check_reading(data.device_id, values)
+
             self.processed += 1
             return True
         finally:
