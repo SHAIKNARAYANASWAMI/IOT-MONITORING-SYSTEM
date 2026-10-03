@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.api import alerts, auth, devices, health, telemetry, thresholds
+from backend.app.api import alerts, analytics, auth, devices, health, telemetry, thresholds
 from backend.app.config import get_settings
 from backend.app.logging_config import setup_logging
 
@@ -18,6 +18,7 @@ app.include_router(devices.router)
 app.include_router(alerts.router)
 app.include_router(thresholds.router)
 app.include_router(telemetry.router)
+app.include_router(analytics.router)
 
 # Serve the dashboard files (frontend/css, frontend/js) and the main page.
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
