@@ -5,3 +5,6 @@ __pycache__/
 *.db
 .pytest_cache/
 logs/
+*.db-journal
+*.db-wal
+test_iot.db
