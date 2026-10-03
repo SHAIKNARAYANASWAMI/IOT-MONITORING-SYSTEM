@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from backend.app.api.auth import require_auth
 
 from backend.app.database.session import get_db
 from backend.app.logging_config import get_logger
@@ -11,7 +12,7 @@ logger = get_logger("api.thresholds")
 router = APIRouter(prefix="/thresholds", tags=["thresholds"])
 
 
-@router.post("", response_model=ThresholdOut)
+@router.post("", response_model=ThresholdOut, dependencies=[Depends(require_auth)])
 def set_threshold(body: ThresholdIn, db: Session = Depends(get_db)):
     if body.min_value is None and body.max_value is None:
         raise HTTPException(status_code=422, detail="Provide min_value, max_value, or both")

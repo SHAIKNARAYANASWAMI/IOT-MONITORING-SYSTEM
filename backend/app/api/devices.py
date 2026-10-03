@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from backend.app.api.auth import require_auth
 
 from backend.app.database.session import get_db
 from backend.app.logging_config import get_logger
@@ -11,7 +12,7 @@ logger = get_logger("api.devices")
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-@router.post("", response_model=DeviceOut, status_code=201)
+@router.post("", response_model=DeviceOut, status_code=201, dependencies=[Depends(require_auth)])
 def register_device(body: DeviceCreate, db: Session = Depends(get_db)):
     repo = DeviceRepository(db)
     if repo.get_by_device_id(body.device_id) is not None:

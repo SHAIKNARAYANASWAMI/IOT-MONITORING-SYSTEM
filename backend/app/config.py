@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
     log_level: str = "INFO"
 
+    admin_username: str = "admin"
+    admin_password: str = "admin123"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
