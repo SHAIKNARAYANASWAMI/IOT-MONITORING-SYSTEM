@@ -134,3 +134,126 @@ same Settings object (a simple singleton).
 **Q12. Why `hmac.compare_digest` for the password check?**
 It compares in constant time, which avoids timing attacks where an attacker
 measures how long a comparison takes to guess a secret character by character.
+
+---
+
+## C. C/C++
+
+**Q13. Explain your C++ module.**
+It is a standalone PC program that mimics firmware-style logic: a `SensorData` struct, `validateSensorData`, `checkThreshold`, `calculateAverage`, `generateAlert`, and a fixed-size circular buffer. Sensor reads are random numbers, not real hardware. It is not on a microcontroller and not connected to the Python backend.
+
+**Q14. Why use bit flags for alarms?**
+Six alarms fit in one byte (`uint8_t`), one bit each. Set with `|=`, test with `&`, clear with `&= ~flag`. Compact for embedded memory and cheap to send over a network. Example: `0x21` = HIGH_TEMP (bit 0) + LOW_BATTERY (bit 5).
+
+**Q15. Pointer vs reference?**
+A reference is an alias that cannot be null and cannot be reseated. A pointer can be null and can change. I use `SensorData&` when the function must fill a caller's struct, and `const float*` plus a length in `calculateAverage` like a C array, with a null check.
+Follow-up: why `const`? It promises the function will not modify the data and lets the compiler catch mistakes.
+
+**Q16. Why no `new`/`malloc` in the circular buffer?**
+Embedded systems have little memory and heap fragmentation is a risk. A fixed array has predictable memory and no allocation failure at runtime.
+
+**Q17. How do you avoid buffer overflow in `generateAlert`?**
+`snprintf` with the remaining size, and I stop if the next write would not fit. A test uses a tiny 8-byte buffer to check the string stays terminated.
+
+**Q18. Stack vs heap?**
+Stack: automatic, fast, freed on function exit, limited size. Heap: manual or RAII-managed, flexible lifetime, slower, can fragment or leak. My C++ module uses only the stack.
+
+**Q19. What does `static_cast` do and why use it?**
+Explicit, checked-at-compile-time type conversion. Clearer and safer than a C-style cast because it states intent and is easy to search for.
+
+**Q20. How does Kernighan's bit count work?**
+`n &= (n - 1)` clears the lowest set bit, so the loop runs once per set bit, not once per bit position.
+
+---
+
+## D. OOP
+
+**Q21. Where did you use OOP and which principles?**
+Rule classes inherit from a `Rule` base class and override `metric` and alert names (Strategy-like, Open/Closed: add a new rule without editing the engine). Repositories encapsulate DB access. Services have a single responsibility each.
+
+**Q22. Explain SOLID with your project.**
+S: each service/repository has one job. O: new rule = new class. D (partly): services use repositories instead of raw SQL. Honest note: I did not implement full interfaces/abstract classes or fake repositories, so Liskov and Interface Segregation are only lightly applied.
+
+**Q23. Inheritance vs composition?**
+Rules use inheritance for shared evaluate logic. `MovingAverage` uses composition: it contains a `RingBuffer` rather than extending it, because it is not a kind of ring buffer.
+
+**Q24. What is encapsulation in `RingBuffer`?**
+Internal array, start index and size are underscore-private. Callers use `append`, `to_list`, `latest`, `oldest`, so the wrap-around logic cannot be broken from outside.
+
+---
+
+## E. Data structures
+
+**Q25. Which data structures did you implement yourself?**
+Ring buffer, moving average (on the ring buffer), binary min-heap priority queue, merge sort and binary search (lower/upper bound). They are used in the analytics service and tested.
+
+**Q26. Ring buffer: how does it work?**
+Fixed array, a start index and a size. Append writes at `(start + size) % capacity`. When full it overwrites the oldest and advances start. Insert O(1), memory O(capacity).
+
+**Q27. Why a heap for alerts?**
+Push and pop are O(log n) and the most urgent is always at the top. A tie counter keeps same-severity alerts FIFO. Honest note: in `urgent_alerts` I push everything then pop `count` items, so it is O(n log n); a sort would also work. The heap shines when alerts arrive continuously.
+
+**Q28. Where do you use a hash map?**
+Python `dict` for severity ranking and the database unique index on `device_id` for lookup. Average O(1) lookup; collisions are handled internally by Python (open addressing).
+
+**Q29. Queue vs stack?**
+Queue is FIFO (my ingestion queue), stack is LIFO. Messages must be processed in arrival order, so a queue.
+
+---
+
+## F. Algorithms
+
+**Q30. Merge sort complexity and why stable?**
+Time O(n log n) always, extra space O(n). Using `<=` when merging keeps equal items in original order. I rely on stability: sort by time first, then by severity, so newest-first holds inside each severity.
+
+**Q31. Binary search: what is lower_bound?**
+Index of the first item with key >= target, in O(log n). Combined with upper_bound it gives a range query in O(log n + k).
+Follow-up: precondition? The list must be sorted by that key.
+
+**Q32. Moving average complexity?**
+O(1) per reading using a running sum: add the new value, subtract the one that left the window. Recomputing the window each time would be O(window).
+
+**Q33. Offline detection complexity?**
+Each scan is O(n) over devices. At 10,000 devices I would use a min-heap keyed by expiry time so only the earliest-expiring device is checked, O(log n) per update.
+
+**Q34. Why implement merge sort when Python has `sorted`?**
+To show I understand the algorithm and its trade-offs. In production I would use the built-in (Timsort), which is faster and well tested.
+
+---
+
+## G. MQTT
+
+**Q35. Why MQTT instead of HTTP for devices?**
+Lightweight headers, persistent connection, publish/subscribe (devices do not need to know the consumers), QoS levels, and low bandwidth, good for constrained devices and bad networks. HTTP is request/response and heavier per message.
+Follow-up: where is HTTP better? Simple request/response APIs, browsers, easy debugging. That is why my REST API also accepts `POST /telemetry`.
+
+**Q36. Explain pub/sub and the broker.**
+Publishers send to a topic, the broker routes to subscribers of that topic. They never connect directly. My topic: `iot/devices/{id}/telemetry`; the backend subscribes to `iot/devices/+/telemetry` (`+` = one-level wildcard).
+
+**Q37. What QoS do you use?**
+QoS 1 (at least once): the broker acknowledges with PUBACK, so duplicates are possible. Honest note: with duplicates a reading could be stored twice; I did not add de-duplication. QoS 0 is fire-and-forget, QoS 2 is exactly-once but slower.
+
+**Q38. How does reconnection work?**
+paho's `reconnect_delay_set` retries with backoff. I subscribe inside `on_connect`, so subscriptions are restored after every reconnect. I tested it by stopping the broker and watching the subscriber reconnect.
+
+**Q39. What is keepalive?**
+The client sends PINGREQ if idle so the broker knows it is alive. Visible in the broker logs as PINGREQ/PINGRESP.
+
+**Q40. Security gaps in my MQTT setup?**
+Local broker with anonymous access and no TLS. For real use: username/password or client certificates, TLS on port 8883, and topic ACLs so a device can publish only to its own topic.
+
+---
+
+## H. Networking
+
+**Q41. TCP vs UDP?**
+TCP: connection-oriented, reliable, ordered, with flow and congestion control. UDP: connectionless, no guarantees, lower overhead. MQTT and HTTP run on TCP.
+
+**Q42. What happens when you open the dashboard URL?**
+DNS/IP (here localhost), TCP handshake to port 8000, HTTP GET `/`, FastAPI returns the HTML, then the browser fetches JS/CSS and the JS calls the API with `fetch`.
+
+**Q43. What are ports 1883 and 8000?**
+1883 is the default MQTT port (8883 for TLS). 8000 is where uvicorn serves the API. Each listens on a TCP socket.
+
+**Q44. Client-server vs pub/sub?**
+Client-server: client asks a specific server and waits for a reply (REST). Pub/sub: producers and consumers are decoupled through a broker, and communication is event-driven.
