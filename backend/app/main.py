@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api import alerts, auth, devices, health, telemetry, thresholds
 from backend.app.config import get_settings
@@ -14,3 +18,12 @@ app.include_router(devices.router)
 app.include_router(alerts.router)
 app.include_router(thresholds.router)
 app.include_router(telemetry.router)
+
+# Serve the dashboard files (frontend/css, frontend/js) and the main page.
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    return FileResponse(FRONTEND_DIR / "index.html")

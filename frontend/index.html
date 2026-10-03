@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IoT Monitoring Dashboard</title>
+</head>
+<body>
+  <h1>Dashboard is working</h1>
+  <p id="status">Loading health data...</p>
+  <script>
+    fetch("/health")
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("status").textContent =
+          "Devices: " + d.devices_total + " | Online: " + d.devices_online +
+          " | Active alerts: " + d.active_alerts;
+      })
+      .catch(() => {
+        document.getElementById("status").textContent = "Could not reach API";
+      });
+  </script>
+</body>
+</html>
