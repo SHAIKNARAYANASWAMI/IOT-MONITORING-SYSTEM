@@ -257,3 +257,106 @@ DNS/IP (here localhost), TCP handshake to port 8000, HTTP GET `/`, FastAPI retur
 
 **Q44. Client-server vs pub/sub?**
 Client-server: client asks a specific server and waits for a reply (REST). Pub/sub: producers and consumers are decoupled through a broker, and communication is event-driven.
+
+---
+
+## I. REST APIs
+
+**Q45. Which status codes do you use and when?**
+200 OK (read/update), 201 Created (new device, telemetry stored), 401 Unauthorized (missing/bad token), 404 Not Found (unknown device or alert), 409 Conflict (duplicate device), 422 Unprocessable Entity (validation error).
+
+**Q46. PUT vs POST?**
+POST creates or triggers an action and is not idempotent. PUT replaces/updates a known resource and should be idempotent. Honest note: my acknowledge/resolve are PUT on action URLs; calling them twice gives the same final state, so they are idempotent in effect.
+
+**Q47. How does your JWT auth work?**
+`POST /auth/login` checks credentials from `.env` and returns a signed token (HS256) with an expiry. Write endpoints use `Depends(require_auth)`, which decodes and verifies the token, else 401. Limits: single admin, password in `.env`, no refresh tokens, and `POST /telemetry` is unauthenticated. A real system needs hashed passwords in a user table and per-device credentials.
+
+**Q48. Why are GET endpoints open?**
+Simplicity for the demo dashboard. In production I would protect reads too.
+
+---
+
+## J. Database
+
+**Q49. Explain your schema and relationships.**
+`devices` (unique `device_id`) has many `sensor_readings` and `alerts` through foreign keys. `thresholds` has a nullable `device_id`: NULL means a global default, a value means a per-device override. `alerts` has CHECK constraints on severity and status.
+
+**Q50. Why index (device_id, timestamp)?**
+The main query is "latest N readings for one device, newest first". The composite index lets the database find the device's rows and read them in time order without scanning the table.
+
+**Q51. How do you reduce DB load?**
+Limit queries (`limit`), index the hot paths, batch inserts, downsample or aggregate old readings, delete old data with a retention policy, cache latest values, and move to PostgreSQL or a time-series database.
+Honest note: my dashboard currently makes one latest-reading call per device every 3 seconds, which is an N+1 pattern. A single "latest per device" endpoint would fix it.
+
+**Q52. What is an upsert and why was it needed?**
+Update if exists, else insert. For thresholds, `UNIQUE(device_id, metric)` does not stop duplicates when `device_id` is NULL in SQLite (NULLs are distinct), so I check in code first.
+
+**Q53. What is a transaction?**
+A group of operations that succeed or fail together (ACID). Each repository method commits after its change. Honest note: one reading plus its alerts are separate commits, so a crash between them could leave a reading without its alert check.
+
+---
+
+## K. Operating systems
+
+**Q54. Process vs thread?**
+A process has its own memory space; threads share a process's memory. My subscriber is one process with several threads; the API is a separate process.
+
+**Q55. Which concurrency issues can happen?**
+Race conditions, deadlocks, and starvation. I avoid shared mutable state by passing messages through a thread-safe queue and giving each thread its own DB session.
+
+**Q56. What is blocking vs non-blocking?**
+The MQTT callback must not block, so it only enqueues (`put_nowait`). The worker may block on the DB. Blocking the network thread would delay or lose messages.
+
+**Q57. What happens when the queue is full?**
+`put_nowait` raises `queue.Full`; I drop the message, log it, and count it. It is a deliberate load-shedding choice.
+
+**Q58. How do daemon threads and shutdown work?**
+Worker threads are daemon threads, so they will not keep the process alive. On Ctrl+C I stop the MQTT client, set a stop event, and join the threads for a clean exit.
+
+---
+
+## L. Testing
+
+**Q59. What did you test?**
+Unit tests: rules, validation, ring buffer, moving average, heap, sort/search. Integration tests: repositories, alert lifecycle, offline detector, ingestion pipeline, and the API with `TestClient` (status codes, auth). About 80 Python tests and 12 C++ `assert` tests.
+
+**Q60. How do tests avoid touching real data?**
+`conftest.py` sets `DATABASE_URL` to a separate `test_iot.db` before the app is imported and recreates tables before each test.
+
+**Q61. Unit vs integration test?**
+Unit: one piece in isolation (a rule). Integration: several pieces together (HTTP, service, database).
+
+**Q62. What is not tested?**
+The live MQTT connection, the dashboard JavaScript, and concurrency under load. The MQTT path was tested manually with the broker. I would add an MQTT integration test and load tests.
+
+---
+
+## M. Debugging
+
+**Q63. How would you debug "the dashboard shows no data"?**
+Follow the pipeline backwards. Is the browser calling the API (F12 Network)? Does `/devices` return data? Is the subscriber running and logging "Received"? Is the broker receiving PUBLISH (`mosquitto -v`)? Is the simulator running? Check logs at each hop.
+
+**Q64. Real bugs you hit?**
+Duplicate alerts, Ctrl+C not stopping on Windows, a venv not activated in the right shell, port 1883 already used by the Mosquitto Windows service, and test files not discovered because of a wrong name.
+
+**Q65. How do you use logging?**
+Python `logging` with timestamp, level, component and message. INFO for normal events, WARNING for alerts and offline devices, ERROR for failures, `logger.exception` to capture stack traces.
+
+---
+
+## N. Software architecture
+
+**Q66. How would you scale to 10,000 devices?**
+Ingestion: multiple subscriber instances using MQTT shared subscriptions, or a clustered broker (EMQX/HiveMQ). Storage: PostgreSQL with partitioning or TimescaleDB, batch inserts. Processing: a message queue (Kafka/RabbitMQ) between ingestion and rules, stateless workers. Cache latest state in Redis. Dashboard: WebSockets or SSE, aggregate endpoints. Offline detection: timeout min-heap. Say clearly that I have not built or load-tested this.
+
+**Q67. How would you make it fault tolerant?**
+Broker cluster, persistent sessions and QoS 1, retry with backoff, durable queue instead of in-memory, database replication and backups, health checks with auto-restart, idempotent processing to handle duplicates.
+
+**Q68. How would you secure device communication?**
+TLS on MQTT, per-device credentials or client certificates, topic ACLs, validate payload size and fields, rate limiting, signed firmware and rotating secrets, and authenticate `POST /telemetry` with device API keys.
+
+**Q69. What would you change if you started again?**
+Fake repositories for faster unit tests, a DB log handler, hysteresis on alerts, one aggregated "latest readings" endpoint, authentication for telemetry, and Docker Compose for one-command startup.
+
+**Q70. Why layered architecture?**
+Separation of concerns: each layer can be understood, tested, and replaced on its own. API code stays thin and business rules live in services.
