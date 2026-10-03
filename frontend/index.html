@@ -2,22 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IoT Monitoring Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <h1>Dashboard is working</h1>
-  <p id="status">Loading health data...</p>
-  <script>
-    fetch("/health")
-      .then(r => r.json())
-      .then(d => {
-        document.getElementById("status").textContent =
-          "Devices: " + d.devices_total + " | Online: " + d.devices_online +
-          " | Active alerts: " + d.active_alerts;
-      })
-      .catch(() => {
-        document.getElementById("status").textContent = "Could not reach API";
-      });
-  </script>
+  <header>
+    <h1>IoT Device Monitoring</h1>
+    <div class="header-right">
+      <span id="health-badge" class="badge badge-ok">System: --</span>
+      <span id="last-update">Updating...</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards">
+      <div class="card"><div class="card-label">Total Devices</div><div class="card-value" id="c-total">--</div></div>
+      <div class="card"><div class="card-label">Online</div><div class="card-value ok" id="c-online">--</div></div>
+      <div class="card"><div class="card-label">Offline</div><div class="card-value muted" id="c-offline">--</div></div>
+      <div class="card"><div class="card-label">Active Alerts</div><div class="card-value warn" id="c-alerts">--</div></div>
+      <div class="card"><div class="card-label">Critical Alerts</div><div class="card-value crit" id="c-critical">--</div></div>
+      <div class="card"><div class="card-label">Avg Temp (&deg;C)</div><div class="card-value" id="c-temp">--</div></div>
+      <div class="card"><div class="card-label">Avg Humidity (%)</div><div class="card-value" id="c-hum">--</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Devices <small>(click a row for details)</small></h2>
+      <div class="table-wrap">
+        <table id="device-table">
+          <thead>
+            <tr>
+              <th>Device ID</th><th>Status</th><th>Temp</th><th>Humidity</th>
+              <th>Voltage</th><th>Current</th><th>Battery</th><th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="device-body"><tr><td colspan="8">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Charts <small id="chart-title">(select a device)</small></h2>
+      <div class="charts">
+        <div class="chart-box"><h3>Temperature</h3><canvas id="chart-temp"></canvas></div>
+        <div class="chart-box"><h3>Humidity</h3><canvas id="chart-hum"></canvas></div>
+        <div class="chart-box"><h3>Voltage</h3><canvas id="chart-volt"></canvas></div>
+        <div class="chart-box"><h3>Current</h3><canvas id="chart-curr"></canvas></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Active Alerts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Device</th><th>Type</th><th>Severity</th><th>Value</th><th>Limit</th><th>Status</th><th>Time</th><th>Action</th></tr>
+          </thead>
+          <tbody id="alert-body"><tr><td colspan="9">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
