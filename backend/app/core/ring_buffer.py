@@ -38,3 +38,8 @@ class RingBuffer:
         if self._size == 0:
             return None
         return self._data[(self._start + self._size - 1) % self.capacity]
+    def oldest(self):
+        """Oldest item, or None if empty. O(1)."""
+        if self._size == 0:
+            return None
+        return self._data[self._start]
