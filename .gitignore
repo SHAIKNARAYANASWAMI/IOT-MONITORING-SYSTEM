@@ -8,3 +8,5 @@ logs/
 *.db-journal
 *.db-wal
 test_iot.db
+*.exe
+*.o
